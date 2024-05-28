@@ -23,7 +23,7 @@ EARLIEST_PERIOD = (2009, 8)
 
 
 def month_params(period: Period):
-    #                                             v  i mean, like, we're not actually going to be encountering any dates earlier than 1000 BC. but like what if
+    #                                               v  i mean, like, we're not actually going to be encountering any dates earlier than 1000 BC. but like what if
     return BASE_PARAMS | { 'expand': f"{period.year:0>2}{period.month:0>2}" }
 
 
