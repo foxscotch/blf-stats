@@ -5,3 +5,9 @@ least it will
 
 the day-to-day statistics are kind of hard to work with in particular so
 basically i want to just snatch all that data and do my own thing
+
+depends on:
+
+- requests
+- beautifulsoup4
+- lxml (for bs4)

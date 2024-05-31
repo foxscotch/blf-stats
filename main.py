@@ -1,5 +1,6 @@
 import json
 import itertools
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from collections.abc import Iterable
@@ -17,10 +18,14 @@ class Period:
 
     @classmethod
     def from_string(cls, string):
-        cls(int(string[:4]), int(string[5:]))
+        return cls(int(string[:4]), int(string[5:]))
+
+    def __repr__(self):
+        return f"{self.year}-{self.month}"
 
 
 DATA_FILE_PATH = "./data.json"
+"""where we'll store data and later load it from"""
 
 BASE_URL = "https://forum.blockland.us/index.php"
 
@@ -28,6 +33,7 @@ BASE_URL = "https://forum.blockland.us/index.php"
 BASE_PARAMS = {"action": "stats", "xml": "1"}
 
 EARLIEST_PERIOD = Period(2009, 8)
+"""earliest period for which there is data available"""
 
 
 def find_max_period(stats) -> tuple[str, int]:
@@ -42,13 +48,11 @@ def find_max_period(stats) -> tuple[str, int]:
             encountered = i
             max_period = period
 
-    return (max_period, encountered)
+    return max_period, encountered
 
 
 def month_params(period: Period) -> dict[str, str]:
     """generate request params for a given period"""
-
-    #                                              v  i mean, like, we're not actually going to be encountering any dates earlier than 1000 BC. but like what if
     return BASE_PARAMS | {"expand": f"{period.year:0>2}{period.month:0>2}"}
 
 
@@ -59,7 +63,9 @@ def get_period_data(period: Period) -> Iterable[dict[str, str]]:
     response = requests.get(BASE_URL, month_params(period))
     soup = BeautifulSoup(response.text, "xml")
 
-    for day in soup.find_all("days"):
+    print(f"Fetched data for {period}")
+
+    for day in soup.find_all("day"):
         yield {
             "date": day["date"],
             "new_topics": day["new_topics"],
@@ -74,7 +80,7 @@ def get_period_data(period: Period) -> Iterable[dict[str, str]]:
 def get_daily_statistics(existing_data: dict):
     """retrieve all daily statistics"""
 
-    stats: list[str, any] = existing_data["daily_statistics"]
+    stats: list[str, any] = existing_data.get("daily_statistics", [])
     start_period = EARLIEST_PERIOD
 
     if "daily_statistics" in existing_data:
@@ -82,17 +88,22 @@ def get_daily_statistics(existing_data: dict):
         del stats[max_date_index:]
         start_period = Period.from_string(max_date)
 
-    for year in itertools.count(start_period.year):
-        start_month = start_period.month if year == start_period.year else 1
-        for month in range(start_month, 13):
-            stats.extend(get_period_data(Period(year, month)))
+    try:
+        for year in itertools.count(start_period.year):
+            start_month = start_period.month if year == start_period.year else 1
+            for month in range(start_month, 13):
+                stats.extend(get_period_data(Period(year, month)))
+                time.sleep(0.5)  # don't want to make too many requests too fast
+    except KeyboardInterrupt:
+        pass  # if interrupted, just return what we've got so far
 
-    return stats.sort()
+    return sorted(stats, key=lambda d: d["date"])
 
 
 def load_data():
     try:
         with open(DATA_FILE_PATH, "r") as f:
+            print(f"Loading from {DATA_FILE_PATH}")
             return json.load(f)
     except FileNotFoundError:
         return {}
@@ -100,14 +111,15 @@ def load_data():
 
 def save_data(data: dict):
     with open(DATA_FILE_PATH, "w") as f:
-        json.dump(data, f)
+        json.dump(data, f, indent=2)
+        print(f"Saved to {DATA_FILE_PATH}")
 
 
 def main():
     # this is where we store alllllll the data; loaded from a file at the start, saved to it at the end
     data = load_data()
 
-    get_daily_statistics(data)
+    data["daily_statistics"] = get_daily_statistics(data)
 
     save_data(data)
 
